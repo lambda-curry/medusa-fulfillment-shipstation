@@ -21,7 +21,7 @@
   "author": "Derek Wene <derek@lambdacurry.dev>",
   "license": "MIT",
   "scripts": {
-    "clean": "./node_modules/.bin/rimraf services/ models/ migrations/ api/ subscribers/ index.js index.map.js",
+    "clean": "./node_modules/.bin/rimraf services/ models/ migrations/ api/ subscribers/ utils/ index.js index.map.js",
     "build": "npm run clean && tsc -p tsconfig.json",
     "watch": "tsc --watch",
     "test": "jest"
