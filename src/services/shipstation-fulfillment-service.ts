@@ -1,18 +1,20 @@
-import {
-  ClaimService,
-  EventBusService,
-  OrderService,
-} from '@medusajs/medusa/dist/services';
+import { ClaimService, OrderService } from '@medusajs/medusa/dist/services';
 import { FulfillmentService } from 'medusa-interfaces';
-import { ShipStationClient } from 'utils/shipstation';
+import {
+  ShipStationAddress,
+  ShipStationClient,
+  ShipStationOrder,
+  ShipStationOrderItem,
+} from '../utils/shipstation';
 import { Promise } from 'bluebird';
+import { Address, LineItem, Order } from '@medusajs/medusa';
 
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
   api_secret: string;
 }
 
-interface ShipStationFullfillmentData {
+interface ShipStationFulfillmentData {
   id: string;
   carrier_code: string;
   carrier_name: string;
@@ -20,7 +22,10 @@ interface ShipStationFullfillmentData {
   name: string;
 }
 
-export class ShipstationFulfillmentService extends FulfillmentService {
+const asDollars = (cents: number) => cents / 100;
+export default class ShipstationFulfillmentService extends FulfillmentService {
+  static identifier = 'shipstation';
+
   constructor(
     { logger, claimService, orderService },
     { api_key, api_secret }: ShipStationFulfillmentPluginOptions
@@ -53,10 +58,10 @@ export class ShipstationFulfillmentService extends FulfillmentService {
    * to create shipping options in Medusa that can be chosen between by the
    * customer.
    */
-  async getFulfillmentOptions(): Promise<ShipStationFullfillmentData[]> {
+  async getFulfillmentOptions(): Promise<ShipStationFulfillmentData[]> {
     const carriers = await this.client.listCarriers();
 
-    return Promise.map(carriers, async carrier => {
+    const arrayOfArrays = await Promise.map(carriers, async carrier => {
       const services = await this.client.listServices(carrier.code);
       return services.map(service => ({
         id: service.code,
@@ -66,6 +71,7 @@ export class ShipstationFulfillmentService extends FulfillmentService {
         name: service.name,
       }));
     });
+    return arrayOfArrays.flat();
   }
 
   /**
@@ -93,9 +99,8 @@ export class ShipstationFulfillmentService extends FulfillmentService {
    * Called before a shipping option is created in Admin. Use this to ensure
    * that a fulfillment option does in fact exist.
    */
-  async validateOption(data: ShipStationFullfillmentData): Promise<boolean> {
-    const options: ShipStationFullfillmentData[] =
-      await this.getFulfillmentOptions();
+  async validateOption(data: ShipStationFulfillmentData): Promise<boolean> {
+    const options = await this.getFulfillmentOptions();
     return options.some(
       option =>
         option.service_code === data.service_code &&
@@ -114,9 +119,67 @@ export class ShipstationFulfillmentService extends FulfillmentService {
     throw Error('calculatePrice must be overridden by the child class');
   }
 
-  createFulfillment(methodData, items, order, fulfillment) {
+  private buildShipStationItem(item: LineItem): ShipStationOrderItem {
+    return {
+      lineItemKey: item.id,
+      quantity: item.quantity,
+      sku: item.variant.sku,
+      name: item.variant.title,
+      unitPrice: asDollars(item.unit_price),
+      imageUrl: item.thumbnail,
+      options: [],
+    };
+  }
+
+  private buildShipStationAddress(address: Address): ShipStationAddress {
+    return {
+      name: `${address.first_name} ${address.last_name}`,
+      company: address.company,
+      street1: address.address_1,
+      street2: address.address_2,
+      city: address.city,
+      state: address.province,
+      postalCode: address.postal_code,
+      country: address.country_code,
+      phone: address.phone,
+      residential: true,
+    };
+  }
+
+  private buildShipStationOrder(
+    items: LineItem[],
+    order: Order,
+    fulfillment: ShipStationFulfillmentData
+  ): ShipStationOrder {
+    return {
+      orderNumber: order.id,
+      orderKey: order.id,
+      orderDate: order.created_at,
+      orderStatus: 'awaiting_shipment',
+      customerUsername: order.email,
+      customerEmail: order.email,
+      billTo: this.buildShipStationAddress(order.billing_address),
+      shipTo: this.buildShipStationAddress(order.shipping_address),
+      items: items.map(this.buildShipStationItem),
+      amountPaid: asDollars(order.total),
+      taxAmount: asDollars(order.tax_total),
+      shippingAmount: asDollars(order.shipping_total),
+      gift: false,
+      confirmation: 'delivery',
+      carrierCode: fulfillment.carrier_code,
+      serviceCode: fulfillment.service_code,
+    };
+  }
+
+  async createFulfillment(
+    methodData,
+    items: LineItem[],
+    order: Order,
+    fulfillment: ShipStationFulfillmentData
+  ) {
     console.log('create fulfillment', methodData, items, order, fulfillment);
-    throw Error('createOrder must be overridden by the child class');
+    const ssOrder = this.buildShipStationOrder(items, order, fulfillment);
+    return await this.client.createOrUpdateOrder(ssOrder);
   }
 
   /**

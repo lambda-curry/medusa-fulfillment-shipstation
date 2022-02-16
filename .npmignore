@@ -5,3 +5,10 @@ node_modules
 src
 coverage
 tsconfig.tsbuildinfo
+
+
+# ignored because we're not using them.
+api
+migrations
+models
+subscribers

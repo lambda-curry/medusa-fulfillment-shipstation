@@ -82,19 +82,17 @@ export interface ShipStationOrderItem {
   sku: string;
   name: string;
   imageUrl?: string;
-  weight: ShipStationWeight;
+  weight?: ShipStationWeight;
   quantity: number;
   unitPrice: number;
-  taxAmount: number;
-  shippingAmount: number;
+  taxAmount?: number;
+  shippingAmount?: number;
   warehouseLocation?: string;
-  options: [
-    {
-      name: string;
-      value: string;
-    }
-  ];
-  productId: number;
+  options: {
+    name: string;
+    value: string;
+  }[];
+  productId?: number;
   fulfillmentSku?: string;
   adjustment?: boolean;
   upc?: string;
