@@ -14,7 +14,7 @@ For more information on how the fulfillment API works, check out this medusa doc
 
 You install this plugin just like any other, in the `medusa-config.js` file.
 
-You need to provide 3 data properties to make it work correctly.
+It requires 2 data props, and takes 2 optional ones.
 
 ```
   {
