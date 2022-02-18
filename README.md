@@ -1,66 +1,45 @@
-<!--lint disable awesome-list-item-->
-<div align="center">
-  <p align="center">
-    <img alt="Medusa" src="https://uploads-ssl.webflow.com/61fba9f6deac297b7b22017d/62000006ce573a706c92546c_logo.svg" width="200" />
-  </p>
-  <h1>Plugin starter (Typescript)</h1>
-  <p>Start to write your own plugin as quick as possible</p>
-    
-  <a href="https://github.com/adrien2p/awesome-medusajs">
-      <img src="https://awesome.re/badge.svg" alt="Awesome">
-  </a>
-</div>
+# Medusa ShipStation Fulfillment Plugin
 
-# Getting started
+## What it does.
 
-Installation
+Medusa allows us to create fulfillment plugins to manage integrations with shipping providers. This plugin manages an integration with ShipStation, which we can use to create shipping labels, packing slips, etc for many different providers (usps, ups, fedex, etc).
 
-```bash
-git clone git@github.com:adrien2p/medusa-plugin-starter-ts.git
+This plugin allows us to configure different shipping options from providers in the Medusa Admin. It also creates orders in ShipStation when orders when a fulfillment order is created in Medusa.
+
+If you setup webhooks for shipstation, they will notify Medusa when the order is shipped (when a label is created), and provide medusa with tracking numbers.
+
+For more information on how the fulfillment API works, check out this medusa doc: https://docs.medusajs.com/guides/fulfillment-api
+
+## Installing
+
+You install this plugin just like any other, in the `medusa-config.js` file.
+
+You need to provide 3 data properties to make it work correctly.
+
+```
+  {
+    resolve: `@lambdacurry/medusa-fulfillment-shipstation`,
+    options: {
+      api_key: 'shipstation-api-key',
+      api_secret: 'shipstation-secret-key',
+      weight_units: 'ounces', // optional property, valid values are 'ounces', 'pounds', or 'grams'.
+      dimension_units: 'inches' // optional property, valid values are 'centimeters' or 'inches'.
+    }
+  }
+
 ```
 
-# Usage
+If you would like shipping notifications connected back into medusa, you will want to setup shipstation webhooks also.
 
-## Api
+You can do this in the ShipStation dashboard at https://ship13.shipstation.com/settings/integrations/Webhooks
 
-### Admin routes
+You need to configure a "On Orders Shipped" webhook that points to ${MEDUSA_URL}/shipstation/webhook
 
-Those routes will automatically be attached by medusa to the `admin` path.
+## Known limitations
 
-### Store routes
+Currently this plugin does not handle returns or swaps.
+Currently this plugin does not handle generating the shipping price on a per-cart basis. You must set a flat rate.
 
-Those routes will automatically be attached by medusa to the `store` path.
+## Help
 
-### Custom routes
-
-All those routes are added in the main router and you have to manage them.
-
-## Models/Migrations
-
-Those models will be attach to the manager and included into the medusa container.
-The migrations will be applied automatically.
-
-## Subscribers
-
-It acts like a service but its main purpose is to extends core flow depending on the
-events you want to listen to.
-
-## Services
-
-Those services will be automatically added to the medusa container and will be available
-in any other service through the constructor injection.
-
-## Loaders
-
-Those will be applied during the loading and allow you to register custom components
-to the container to be accessible later on.
-
-# Deployment
-
-Once your plugin is done. 
-
-```bash
-npm run build && npm version && npm publish
-```
-
-You can now install it into your project file `medusa-config`.
+If you need any help, you can reach out to derek@lambdacurry.dev
