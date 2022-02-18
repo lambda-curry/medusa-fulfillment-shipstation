@@ -18,6 +18,7 @@ import {
   Order,
 } from '@medusajs/medusa';
 import { ShipStationClient } from '../utils/shipstation';
+import { Logger } from 'winston';
 
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
@@ -61,7 +62,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
   weightUnits: 'pounds' | 'ounces' | 'grams';
   dimensionUnits: 'inches' | 'centimeters';
-  logger: Console;
+  logger: Logger;
   orderService: OrderService;
   claimService: ClaimService;
   client: ShipStationClient;
