@@ -101,7 +101,6 @@ export interface ShipStationOrderItem {
 export interface ShipStationAdvancedOptions {}
 export interface ShipStationInternationalOptions {}
 export interface ShipStationInsuranceOptions {}
-
 export interface ShipStationOrder {
   orderNumber?: string;
   orderKey?: string;
@@ -141,6 +140,46 @@ export interface ShipStationOrder {
   tagIds?: number[];
 }
 
+export interface ShipStationWebhook {
+  resource_url: string;
+  resource_type: string;
+}
+
+export interface ShipStationShipment {
+  shipmentId: number;
+  orderId: number;
+  orderKey: string;
+  userId: string;
+  orderNumber: string;
+  createDate: Date;
+  shipDate: string;
+  shipmentCost: number;
+  insuranceCost: number;
+  trackingNumber: string;
+  isReturnLabel: false;
+  batchNumber?: string;
+  carrierCode: string;
+  serviceCode: string;
+  packageCode: string;
+  confirmation:
+    | 'none'
+    | 'delivery'
+    | 'signature'
+    | 'adult_signature'
+    | 'direct_signature';
+  warehouseId?: number;
+  voided: boolean;
+  voidDate: Date;
+  marketplaceNotified: boolean;
+  notifyErrorMessage?: string;
+  shipTo: ShipStationAddress;
+  weight?: ShipStationWeight;
+  dimensions?: ShipStationDimensions;
+  insuranceOptions?: ShipStationInsuranceOptions;
+  advancedOptions: ShipStationAdvancedOptions;
+  shipmentItems?: ShipStationOrderItem[];
+}
+
 export class ShipStationClient {
   constructor(props: ShipStationClientProps) {
     this.client = axios.create({
@@ -176,6 +215,16 @@ export class ShipStationClient {
     order: ShipStationOrder
   ): Promise<ShipStationOrder> {
     const res = await this.client.post('/orders/createorder', order);
+    return res.data;
+  }
+
+  /**
+   * Caller needs to provide the expected response type.
+   * @param url
+   * @returns
+   */
+  async getWebhookData<T>(url: string): Promise<T> {
+    const res = await this.client.get<T>(url);
     return res.data;
   }
 }

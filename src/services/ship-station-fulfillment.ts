@@ -5,9 +5,16 @@ import {
   ShipStationClient,
   ShipStationOrder,
   ShipStationOrderItem,
+  ShipStationShipment,
+  ShipStationWebhook,
 } from '../utils/shipstation';
 import { Promise } from 'bluebird';
-import { Address, LineItem, Order } from '@medusajs/medusa';
+import {
+  Address,
+  defaultAdminOrdersFields,
+  LineItem,
+  Order,
+} from '@medusajs/medusa';
 
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
@@ -23,7 +30,7 @@ interface ShipStationFulfillmentData {
 }
 
 const asDollars = (cents: number) => cents / 100;
-export default class ShipstationFulfillmentService extends FulfillmentService {
+export default class ShipStationFulfillmentService extends FulfillmentService {
   static identifier = 'shipstation';
 
   constructor(
@@ -86,9 +93,6 @@ export default class ShipstationFulfillmentService extends FulfillmentService {
    *    is usually important for future actions like generating shipping labels
    */
   validateFulfillmentData(optionData, data, cart) {
-    this.logger.warn(
-      'validateFulfillmentData called:' + JSON.stringify({ data, cart })
-    );
     return {
       ...optionData,
       ...data,
@@ -107,16 +111,121 @@ export default class ShipstationFulfillmentService extends FulfillmentService {
         option.carrier_code === data.carrier_code
     );
   }
+  /**
+   * Although ship station can calculate shipping rates, we don't need this right now, as we're just using flat rates for shipping.
+   * In the future we can implement this.
+   * @param data
+   * @returns
+   */
 
-  canCalculate(data) {
+  canCalculate(data: ShipStationFulfillmentData) {
     return false;
   }
 
   /**
    * Used to calculate a price for a given shipping option.
+   * Since we are not using shipstation to calculate rates, this method is not needed.
    */
   calculatePrice(data, cart) {
-    throw Error('calculatePrice must be overridden by the child class');
+    throw Error('Calculate Price is currently not implemented');
+  }
+
+  /**
+   * I think there's a lot of data we still need to be able to correctly throw this to shipstation. We need weights and
+   * box dimensions in order to be able to do this correctly. For now, they can manually fill it out in shipstation.
+   * @param methodData
+   * @param items
+   * @param order
+   * @param fulfillment
+   * @returns
+   */
+  async createFulfillment(
+    methodData,
+    items: LineItem[],
+    order: Order,
+    fulfillment: ShipStationFulfillmentData
+  ) {
+    const ssOrder = this.buildShipStationOrder(items, order, fulfillment);
+    return await this.client.createOrUpdateOrder(ssOrder);
+  }
+
+  async handleWebhook({
+    resource_url,
+    resource_type,
+  }: ShipStationWebhook): Promise<void> {
+    if (resource_type === 'SHIP_NOTIFY') {
+      const shipments = await this.client.getWebhookData<ShipStationShipment[]>(
+        resource_url
+      );
+
+      const orderIds = shipments.map(s => s.orderKey);
+
+      const orders: Order[] = await this.orderService.list(
+        { id: orderIds },
+        {
+          skip: 0,
+          take: 999999,
+          order: { created_at: 'DESC' },
+          relations: [
+            'customer',
+            'billing_address',
+            'shipping_address',
+            'discounts',
+            'discounts.rule',
+            'discounts.rule.valid_for',
+            'shipping_methods',
+            'payments',
+          ],
+          select: defaultAdminOrdersFields,
+        }
+      );
+
+      await Promise.map(orders, async order => {
+        const shipment = shipments.find(s => s.orderKey === order.id);
+        await this.orderService.createShipment(
+          order.id,
+          shipment.shipmentId.toString(),
+          [
+            {
+              tracking_number: shipment.trackingNumber,
+            },
+          ]
+        );
+      });
+    }
+  }
+
+  /**
+   * Used to retrieve documents associated with a fulfillment.
+   * Will default to returning no documents.
+   */
+  getFulfillmentDocuments(data) {
+    return [];
+  }
+
+  /**
+   * Used to create a return order. Should return the data necessary for future
+   * operations on the return; in particular the data may be used to receive
+   * documents attached to the return.
+   */
+  createReturn(fromData) {
+    throw Error('createReturn must be overridden by the child class');
+  }
+
+  /**
+   * Used to retrieve documents related to a return order.
+   * We don't want any returns, so leaving this empty.
+   */
+  getReturnDocuments(data) {
+    return [];
+  }
+
+  /**
+   * Used to retrieve documents related to a shipment.
+   * We can support showing packing slips and labels in the future if we want to add that to the medusa admin ourselves.
+   */
+  getShipmentDocuments(data) {
+    return [];
   }
 
   private buildShipStationItem(item: LineItem): ShipStationOrderItem {
@@ -169,47 +278,5 @@ export default class ShipstationFulfillmentService extends FulfillmentService {
       carrierCode: fulfillment.carrier_code,
       serviceCode: fulfillment.service_code,
     };
-  }
-
-  async createFulfillment(
-    methodData,
-    items: LineItem[],
-    order: Order,
-    fulfillment: ShipStationFulfillmentData
-  ) {
-    console.log('create fulfillment', methodData, items, order, fulfillment);
-    const ssOrder = this.buildShipStationOrder(items, order, fulfillment);
-    return await this.client.createOrUpdateOrder(ssOrder);
-  }
-
-  /**
-   * Used to retrieve documents associated with a fulfillment.
-   * Will default to returning no documents.
-   */
-  getFulfillmentDocuments(data) {
-    return [];
-  }
-
-  /**
-   * Used to create a return order. Should return the data necessary for future
-   * operations on the return; in particular the data may be used to receive
-   * documents attached to the return.
-   */
-  createReturn(fromData) {
-    throw Error('createReturn must be overridden by the child class');
-  }
-
-  /**
-   * Used to retrieve documents related to a return order.
-   */
-  getReturnDocuments(data) {
-    return [];
-  }
-
-  /**
-   * Used to retrieve documents related to a shipment.
-   */
-  getShipmentDocuments(data) {
-    return [];
   }
 }
