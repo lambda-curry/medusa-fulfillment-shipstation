@@ -2,11 +2,9 @@ import { ClaimService, OrderService } from '@medusajs/medusa/dist/services';
 import { FulfillmentService } from 'medusa-interfaces';
 import {
   ShipStationAddress,
-  ShipStationDimensions,
   ShipStationOrder,
   ShipStationOrderItem,
   ShipStationOrderShippedWebhookData,
-  ShipStationShipment,
   ShipStationWebhook,
   ShipStationWeight,
 } from '../utils/types';
@@ -35,7 +33,8 @@ interface ShipStationFulfillmentData {
   name: string;
 }
 
-const asDollars = (cents: number) => cents / 100;
+const cents2Dollars = (cents: number) => cents / 100;
+
 export default class ShipStationFulfillmentService extends FulfillmentService {
   static identifier = 'shipstation';
 
@@ -251,7 +250,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       quantity: item.quantity,
       sku: item.variant.sku,
       name: item.variant.title,
-      unitPrice: asDollars(item.unit_price),
+      unitPrice: cents2Dollars(item.unit_price),
       imageUrl: item.thumbnail,
       weight: this.buildShipStationWeight(item.variant.weight),
       options: [],
@@ -288,9 +287,9 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       billTo: this.buildShipStationAddress(order.billing_address),
       shipTo: this.buildShipStationAddress(order.shipping_address),
       items: items.map(this.buildShipStationItem),
-      amountPaid: asDollars(order.total),
-      taxAmount: asDollars(order.tax_total),
-      shippingAmount: asDollars(order.shipping_total),
+      amountPaid: cents2Dollars(order.total),
+      taxAmount: cents2Dollars(order.tax_total),
+      shippingAmount: cents2Dollars(order.shipping_total),
       gift: false,
       confirmation: 'delivery',
       carrierCode: fulfillment.carrier_code,
