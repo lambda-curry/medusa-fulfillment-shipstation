@@ -1,6 +1,6 @@
 {
   "name": "@lambdacurry/medusa-fulfillment-shipstation",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "public": true,
   "description": "A Medusa fulfillment provider plugin for ShipStation",
   "main": "index.js",
