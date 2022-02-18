@@ -2,12 +2,14 @@ import { ClaimService, OrderService } from '@medusajs/medusa/dist/services';
 import { FulfillmentService } from 'medusa-interfaces';
 import {
   ShipStationAddress,
-  ShipStationClient,
+  ShipStationDimensions,
   ShipStationOrder,
   ShipStationOrderItem,
+  ShipStationOrderShippedWebhookData,
   ShipStationShipment,
   ShipStationWebhook,
-} from '../utils/shipstation';
+  ShipStationWeight,
+} from '../utils/types';
 import { Promise } from 'bluebird';
 import {
   Address,
@@ -15,10 +17,13 @@ import {
   LineItem,
   Order,
 } from '@medusajs/medusa';
+import { ShipStationClient } from '../utils/shipstation';
 
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
   api_secret: string;
+  weight_units: 'pounds' | 'ounces' | 'grams';
+  dimension_units: 'inches' | 'centimeters';
 }
 
 interface ShipStationFulfillmentData {
@@ -35,18 +40,27 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
   constructor(
     { logger, claimService, orderService },
-    { api_key, api_secret }: ShipStationFulfillmentPluginOptions
+    {
+      api_key,
+      api_secret,
+      weight_units = 'ounces',
+      dimension_units = 'inches',
+    }: ShipStationFulfillmentPluginOptions
   ) {
     super();
     this.logger = logger;
     this.orderService = orderService;
     this.claimService = claimService;
+    this.weightUnits = weight_units;
+    this.dimensionUnits = dimension_units;
     this.client = new ShipStationClient({
       apiKey: api_key,
       apiSecret: api_secret,
     });
   }
 
+  weightUnits: 'pounds' | 'ounces' | 'grams';
+  dimensionUnits: 'inches' | 'centimeters';
   logger: Console;
   orderService: OrderService;
   claimService: ClaimService;
@@ -154,11 +168,12 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
     resource_type,
   }: ShipStationWebhook): Promise<void> {
     if (resource_type === 'SHIP_NOTIFY') {
-      const shipments = await this.client.getWebhookData<ShipStationShipment[]>(
-        resource_url
-      );
+      const { shipments } =
+        await this.client.getWebhookData<ShipStationOrderShippedWebhookData>(
+          resource_url
+        );
 
-      const orderIds = shipments.map(s => s.orderKey);
+      const orderIds = shipments.map(s => s.orderNumber);
 
       const orders: Order[] = await this.orderService.list(
         { id: orderIds },
@@ -167,6 +182,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
           take: 999999,
           order: { created_at: 'DESC' },
           relations: [
+            'fulfillments',
             'customer',
             'billing_address',
             'shipping_address',
@@ -180,16 +196,16 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
         }
       );
 
-      await Promise.map(orders, async order => {
-        const shipment = shipments.find(s => s.orderKey === order.id);
+      await Promise.map(shipments, async shipment => {
+        const order = orders.find(o => o.id === shipment.orderNumber);
+        if (!order) return;
+        const trackingNumbers = shipment.trackingNumber
+          ? [{ tracking_number: shipment.trackingNumber }]
+          : [];
         await this.orderService.createShipment(
           order.id,
-          shipment.shipmentId.toString(),
-          [
-            {
-              tracking_number: shipment.trackingNumber,
-            },
-          ]
+          shipment.orderKey,
+          trackingNumbers
         );
       });
     }
@@ -236,6 +252,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       name: item.variant.title,
       unitPrice: asDollars(item.unit_price),
       imageUrl: item.thumbnail,
+      weight: this.buildShipStationWeight(item.variant.weight),
       options: [],
     };
   }
@@ -262,7 +279,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
   ): ShipStationOrder {
     return {
       orderNumber: order.id,
-      orderKey: order.id,
+      orderKey: fulfillment.id,
       orderDate: order.created_at,
       orderStatus: 'awaiting_shipment',
       customerUsername: order.email,
@@ -277,6 +294,17 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       confirmation: 'delivery',
       carrierCode: fulfillment.carrier_code,
       serviceCode: fulfillment.service_code,
+    };
+  }
+
+  private buildShipStationWeight(
+    weight?: number
+  ): ShipStationWeight | undefined {
+    if (!weight) return undefined;
+
+    return {
+      value: weight,
+      units: this.weightUnits,
     };
   }
 }

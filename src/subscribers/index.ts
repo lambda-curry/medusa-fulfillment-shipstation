@@ -1,6 +1,6 @@
 import ShipStationFulfillmentService from '../services/ship-station-fulfillment';
 import { EventBusService } from '@medusajs/medusa/dist/services';
-import { ShipStationWebhook } from 'utils/shipstation';
+import { ShipStationWebhook } from 'utils/types';
 
 class ShipStationSubscriber {
   private shipStationService: ShipStationFulfillmentService;
