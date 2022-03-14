@@ -1,11 +1,12 @@
-import { Router } from "express";
-import routes from "./routes";
+import bodyParser = require('body-parser');
+import { Router } from 'express';
+import { webhook } from './webhook';
 
 /* TODO second argument pluginConfig: Record<string, unknown> part of PR https://github.com/medusajs/medusa/pull/959 not yet in master */
-export default (rootDirectory: string): Router => {
+export default (): Router => {
   const app = Router();
 
-  routes(app, rootDirectory);
+  app.post('/shipstation/webhook', bodyParser.json(), webhook);
 
   return app;
 };
