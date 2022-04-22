@@ -298,7 +298,10 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
     };
   }
 
-  private buildShipStationAddress(address: Address): ShipStationAddress {
+  private buildShipStationAddress(
+    address?: Address
+  ): ShipStationAddress | null {
+    if (!address) return null;
     return {
       name: `${address.first_name} ${address.last_name}`,
       company: address.company,
