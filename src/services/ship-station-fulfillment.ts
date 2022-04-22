@@ -21,8 +21,18 @@ import { Logger } from 'winston';
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
   api_secret: string;
+  branding_id?: string; // used for ShipStation branded tracking links
   weight_units: 'pounds' | 'ounces' | 'grams';
   dimension_units: 'inches' | 'centimeters';
+}
+
+interface ShipstationTrackingLinkParams {
+  branding_id: string;
+  carrier_code: string;
+  tracking_number: string;
+  order_number: string;
+  postal_code: string;
+  locale: string;
 }
 
 interface ShipStationFulfillmentData {
@@ -45,6 +55,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       api_secret,
       weight_units = 'ounces',
       dimension_units = 'inches',
+      branding_id,
     }: ShipStationFulfillmentPluginOptions
   ) {
     super();
@@ -53,6 +64,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
     this.claimService = claimService;
     this.weightUnits = weight_units;
     this.dimensionUnits = dimension_units;
+    this.brandingId = branding_id;
     this.client = new ShipStationClient({
       apiKey: api_key,
       apiSecret: api_secret,
@@ -61,6 +73,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
   weightUnits: 'pounds' | 'ounces' | 'grams';
   dimensionUnits: 'inches' | 'centimeters';
+  brandingId?: string;
   logger: Logger;
   orderService: OrderService;
   claimService: ClaimService;
@@ -163,6 +176,21 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
     return await this.client.createOrUpdateOrder(ssOrder);
   }
 
+  buildTrackingPageUrl(params: ShipstationTrackingLinkParams) {
+    const updatedParams = {
+      ...params,
+      order_number: Buffer.from(params.order_number).toString('base64'),
+    };
+
+    const qs = Object.keys(updatedParams)
+      .map(
+        key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
+      )
+      .join('&');
+
+    return `https://trackshipment.shipstation.com/?${qs}`;
+  }
+
   async handleWebhook({
     resource_url,
     resource_type,
@@ -188,7 +216,6 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
             'shipping_address',
             'discounts',
             'discounts.rule',
-            'discounts.rule.valid_for',
             'shipping_methods',
             'payments',
           ],
@@ -197,10 +224,24 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       );
 
       await Promise.map(shipments, async shipment => {
+        const params = {
+          carrier_code: shipment.carrierCode,
+          order_number: shipment.orderNumber,
+          tracking_number: shipment.trackingNumber,
+          postal_code: shipment.shipTo.postalCode,
+          locale: 'en',
+          branding_id: this.brandingId,
+        };
+
         const order = orders.find(o => o.id === shipment.orderNumber);
         if (!order) return;
         const trackingNumbers = shipment.trackingNumber
-          ? [{ tracking_number: shipment.trackingNumber }]
+          ? [
+              {
+                tracking_number: shipment.trackingNumber,
+                url: this.buildTrackingPageUrl(params),
+              },
+            ]
           : [];
         await this.orderService.createShipment(
           order.id,
