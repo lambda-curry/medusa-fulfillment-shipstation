@@ -330,7 +330,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       customerEmail: order.email,
       billTo: this.buildShipStationAddress(order.billing_address),
       shipTo: this.buildShipStationAddress(order.shipping_address),
-      items: items.map(this.buildShipStationItem),
+      items: items.map(item => this.buildShipStationItem(item)),
       amountPaid: cents2Dollars(order.total),
       taxAmount: cents2Dollars(order.tax_total),
       shippingAmount: cents2Dollars(order.shipping_total),
