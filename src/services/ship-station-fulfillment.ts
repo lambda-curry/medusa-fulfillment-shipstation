@@ -310,7 +310,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       city: address.city,
       state: address.province,
       postalCode: address.postal_code,
-      country: address.country_code,
+      country: (address.country_code || '').toUpperCase(),
       phone: address.phone,
       residential: true,
     };
