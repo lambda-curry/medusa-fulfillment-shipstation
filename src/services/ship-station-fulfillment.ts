@@ -12,11 +12,13 @@ import { Promise } from 'bluebird';
 import {
   Address,
   defaultAdminOrdersFields,
+  Discount,
   LineItem,
   Order,
 } from '@medusajs/medusa';
 import { ShipStationClient } from '../utils/shipstation';
 import { Logger } from 'winston';
+import { DiscountRuleType } from '@medusajs/medusa/dist/models/discount-rule';
 
 export interface ShipStationFulfillmentPluginOptions {
   api_key: string;
@@ -95,9 +97,9 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
   async getFulfillmentOptions(): Promise<ShipStationFulfillmentData[]> {
     const carriers = await this.client.listCarriers();
 
-    const arrayOfArrays = await Promise.map(carriers, async carrier => {
+    const arrayOfArrays = await Promise.map(carriers, async (carrier) => {
       const services = await this.client.listServices(carrier.code);
-      return services.map(service => ({
+      return services.map((service) => ({
         id: service.code,
         carrier_code: service.carrierCode,
         carrier_name: carrier.name,
@@ -133,7 +135,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
   async validateOption(data: ShipStationFulfillmentData): Promise<boolean> {
     const options = await this.getFulfillmentOptions();
     return options.some(
-      option =>
+      (option) =>
         option.service_code === data.service_code &&
         option.carrier_code === data.carrier_code
     );
@@ -184,7 +186,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
     const qs = Object.keys(updatedParams)
       .map(
-        key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
+        (key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
       )
       .join('&');
 
@@ -201,7 +203,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
           resource_url
         );
 
-      const orderIds = shipments.map(s => s.orderNumber);
+      const orderIds = shipments.map((s) => s.orderNumber);
 
       const orders: Order[] = await this.orderService.list(
         { id: orderIds },
@@ -223,7 +225,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
         }
       );
 
-      await Promise.map(shipments, async shipment => {
+      await Promise.map(shipments, async (shipment) => {
         const params = {
           carrier_code: shipment.carrierCode,
           order_number: shipment.orderNumber,
@@ -233,7 +235,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
           branding_id: this.brandingId,
         };
 
-        const order = orders.find(o => o.id === shipment.orderNumber);
+        const order = orders.find((o) => o.id === shipment.orderNumber);
         if (!order) return;
         const trackingNumbers = shipment.trackingNumber
           ? [
@@ -285,6 +287,20 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
     return [];
   }
 
+  getDiscountValue(discount, items) {
+    if (discount.rule.type === DiscountRuleType.FIXED)
+      return discount.rule.value * -1;
+      
+    if (discount.rule.type === DiscountRuleType.PERCENTAGE)
+      return (
+        discount.rule.value *
+        items.reduce((prev, current) => prev + current.unit_price, 0) *
+        -1
+      );
+
+    return 0;
+  }
+
   private buildShipStationItem(item: LineItem): ShipStationOrderItem {
     return {
       lineItemKey: item.id,
@@ -294,6 +310,20 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       unitPrice: cents2Dollars(item.unit_price),
       imageUrl: item.thumbnail,
       weight: this.buildShipStationWeight(item.variant.weight),
+      options: [],
+    };
+  }
+
+  private buildShipStationDiscountItem(
+    discount: Discount,
+    items: LineItem[]
+  ): ShipStationOrderItem {
+    return {
+      lineItemKey: discount.id,
+      quantity: 1,
+      sku: discount.code,
+      name: discount.code,
+      unitPrice: cents2Dollars(this.getDiscountValue(discount, items)),
       options: [],
     };
   }
@@ -330,7 +360,12 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       customerEmail: order.email,
       billTo: this.buildShipStationAddress(order.billing_address),
       shipTo: this.buildShipStationAddress(order.shipping_address),
-      items: items.map(item => this.buildShipStationItem(item)),
+      items: [
+        ...items.map((item) => this.buildShipStationItem(item)),
+        ...order.discounts?.map((discount) =>
+          this.buildShipStationDiscountItem(discount, items)
+        ),
+      ],
       amountPaid: cents2Dollars(order.total),
       taxAmount: cents2Dollars(order.tax_total),
       shippingAmount: cents2Dollars(order.shipping_total),
