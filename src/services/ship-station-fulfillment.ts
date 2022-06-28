@@ -293,7 +293,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
     if (discount.rule.type === DiscountRuleType.PERCENTAGE)
       return (
-        discount.rule.value *
+        (discount.rule.value / 100) *
         items.reduce(
           (prev, current) => prev + cents2Dollars(current.unit_price),
           0
