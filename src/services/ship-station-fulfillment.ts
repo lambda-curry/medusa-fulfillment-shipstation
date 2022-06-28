@@ -289,12 +289,15 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
 
   getDiscountValue(discount, items) {
     if (discount.rule.type === DiscountRuleType.FIXED)
-      return discount.rule.value * -1;
-      
+      return cents2Dollars(discount.rule.value) * -1;
+
     if (discount.rule.type === DiscountRuleType.PERCENTAGE)
       return (
         discount.rule.value *
-        items.reduce((prev, current) => prev + current.unit_price, 0) *
+        items.reduce(
+          (prev, current) => prev + cents2Dollars(current.unit_price),
+          0
+        ) *
         -1
       );
 
@@ -323,7 +326,7 @@ export default class ShipStationFulfillmentService extends FulfillmentService {
       quantity: 1,
       sku: discount.code,
       name: discount.code,
-      unitPrice: cents2Dollars(this.getDiscountValue(discount, items)),
+      unitPrice: this.getDiscountValue(discount, items),
       options: [],
     };
   }
